@@ -1,0 +1,20 @@
+# Python
+backend/.venv/
+backend/bin/stockfish
+backend/**/__pycache__/
+backend/**/*.py[cod]
+backend/.pytest_cache/
+backend/data/
+*.egg-info/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.log
+.env
+.env.local
