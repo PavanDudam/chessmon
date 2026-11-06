@@ -7,6 +7,7 @@ import math
 import chess
 import pytest
 
+from app.chess.accuracy import compute_player_stats
 from app.chess.classifier import (
     MoveLabel,
     classify_move,
@@ -96,6 +97,38 @@ def test_book_label():
     assert result.label == MoveLabel.BOOK
 
 
+def test_engine_move_is_best_even_with_a_small_swing():
+    result = classify_move(
+        cp_before_white=0,
+        cp_after_white=-8,
+        moved_by_white=True,
+        is_engine_best=True,
+    )
+    assert result.label == MoveLabel.BEST
+
+
+def test_excellent_when_strong_but_not_engine_move():
+    result = classify_move(
+        cp_before_white=0,
+        cp_after_white=-8,
+        moved_by_white=True,
+        is_engine_best=False,
+    )
+    assert 0.5 <= result.win_pct_loss < 1
+    assert result.label == MoveLabel.EXCELLENT
+
+
+def test_good_sits_above_excellent():
+    result = classify_move(
+        cp_before_white=0,
+        cp_after_white=-15,
+        moved_by_white=True,
+        is_engine_best=False,
+    )
+    assert 1 <= result.win_pct_loss < 2
+    assert result.label == MoveLabel.GOOD
+
+
 def test_missed_mate_is_blunder():
     assert missed_forced_mate(mate_before=2, mate_after=None, moved_by_white=True)
     assert missed_forced_mate(mate_before=-3, mate_after=50, moved_by_white=False) or True
@@ -108,6 +141,18 @@ def test_missed_mate_is_blunder():
         missed_mate=True,
     )
     assert result.label == MoveLabel.BLUNDER
+
+
+def test_accuracy_counts_excellent_and_skips_book():
+    stats = compute_player_stats(
+        [MoveLabel.BOOK, MoveLabel.EXCELLENT, MoveLabel.BEST],
+        [0.0, 0.8, 0.0],
+    )
+    assert stats["counts"]["Excellent"] == 1
+    assert stats["counts"]["Book"] == 1
+    assert stats["move_count"] == 3
+    # Book is left out of the average, so two scored moves remain.
+    assert stats["accuracy"] is not None
 
 
 def test_fen_cache_key_drops_clocks():

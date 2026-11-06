@@ -11,6 +11,7 @@ from typing import Optional
 class MoveLabel(str, Enum):
     BOOK = "Book"
     BEST = "Best"
+    EXCELLENT = "Excellent"
     GOOD = "Good"
     INACCURACY = "Inaccuracy"
     MISTAKE = "Mistake"
@@ -18,7 +19,9 @@ class MoveLabel(str, Enum):
 
 
 # win% drop thresholds (percentage points)
-THRESH_BEST = 2.0
+# Best is the engine's move. Excellent is a strong move that is not that move.
+THRESH_EXCELLENT = 1.0
+THRESH_GOOD = 2.0
 THRESH_INACCURACY = 5.0
 THRESH_MISTAKE = 10.0
 
@@ -65,6 +68,7 @@ def classify_move(
     moved_by_white: bool,
     is_book: bool = False,
     missed_mate: bool = False,
+    is_engine_best: Optional[bool] = None,
 ) -> Classification:
     """Classify a played move from White-perspective evals before/after the move.
 
@@ -89,9 +93,17 @@ def classify_move(
         label = MoveLabel.BOOK
     elif missed_mate:
         label = MoveLabel.BLUNDER
-    elif loss < THRESH_BEST:
-        # Distinguish Best vs Good slightly: near-zero loss = Best
-        label = MoveLabel.BEST if loss < 0.5 else MoveLabel.GOOD
+    elif is_engine_best:
+        label = MoveLabel.BEST
+    elif loss < THRESH_EXCELLENT:
+        # No engine move to compare: a near-zero loss is still Best.
+        label = (
+            MoveLabel.BEST
+            if is_engine_best is None and loss < 0.5
+            else MoveLabel.EXCELLENT
+        )
+    elif loss < THRESH_GOOD:
+        label = MoveLabel.GOOD
     elif loss < THRESH_INACCURACY:
         label = MoveLabel.INACCURACY
     elif loss < THRESH_MISTAKE:

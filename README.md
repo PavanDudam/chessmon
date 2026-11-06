@@ -61,7 +61,6 @@ Open http://127.0.0.1:5173 — Vite proxies `/api` to the backend.
 | `ENGINE_POOL_SIZE` | `2` | Concurrent Stockfish processes |
 | `ENGINE_HASH_MB` | `128` | Hash per engine |
 | `DEFAULT_MOVETIME_MS` | `500` | Think time per position |
-| `BOOK_PLIES` | `10` | Opening plies labeled Book |
 | `DATABASE_PATH` | `backend/data/chessmon.db` | SQLite file |
 | `CORS_ORIGINS` | localhost Vite origins | Allowed browser origins |
 
@@ -109,4 +108,4 @@ chessmon_architecture_v2.md
 
 - Cache keys use the **first 4 FEN fields** + analysis settings, so repeated openings are instant.
 - One Stockfish process searches one position at a time; the pool avoids friends blocking each other.
-- Move labels use win-probability drop (not raw centipawns). Book / Brilliant / Great extras can come later.
+- Move labels use win-probability drop (not raw centipawns). Book means the move is still in the opening file (`backend/app/chess/data/openings/`). Brilliant / Great can come later.
