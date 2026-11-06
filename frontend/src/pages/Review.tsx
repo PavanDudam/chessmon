@@ -155,7 +155,8 @@ export function Review() {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load')
       })
 
-    const unsub = subscribeGameEvents(
+    let unsub = () => {}
+    unsub = subscribeGameEvents(
       id,
       (event) => {
         if (event.type === 'progress') {
@@ -189,14 +190,17 @@ export function Review() {
         }
       },
       () => {
-        // EventSource errors are common on completion; refresh once.
-        if (id) {
-          getGame(id)
-            .then((data) => {
-              if (data.status === 'completed' || data.status === 'error') setReview(data)
-            })
-            .catch(() => undefined)
-        }
+        // A drop before the terminal event. If the review is already finished, close
+        // so the browser does not reconnect for the rest of the visit.
+        if (!id) return
+        getGame(id)
+          .then((data) => {
+            if (data.status === 'completed' || data.status === 'error') {
+              setReview(data)
+              unsub()
+            }
+          })
+          .catch(() => undefined)
       },
     )
 
