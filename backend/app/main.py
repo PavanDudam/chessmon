@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import logging
+import mimetypes
 from contextlib import asynccontextmanager
+
+mimetypes.add_type("audio/wav", ".wav")
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app import config
 from app.api import analyze, games
@@ -50,6 +54,9 @@ app.add_middleware(
 
 app.include_router(games.router)
 app.include_router(analyze.router)
+
+config.AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/audio", StaticFiles(directory=str(config.AUDIO_DIR)), name="audio")
 
 
 @app.get("/api/health")

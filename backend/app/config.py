@@ -15,6 +15,17 @@ DEFAULT_MOVETIME_MS = int(os.environ.get("DEFAULT_MOVETIME_MS", "500"))
 DATABASE_PATH = os.environ.get(
     "DATABASE_PATH", str(BASE_DIR / "data" / "chessmon.db")
 )
+AUDIO_DIR = Path(os.environ.get("AUDIO_DIR", str(BASE_DIR / "data" / "audio")))
+_PIPER_DIR = BASE_DIR / "bin" / "piper"
+_DEFAULT_PIPER_BIN = _PIPER_DIR / "piper"
+_DEFAULT_PIPER_MODEL = _PIPER_DIR / "en_US-lessac-medium.onnx"
+PIPER_BIN = os.environ.get("PIPER_BIN", str(_DEFAULT_PIPER_BIN))
+PIPER_MODEL = os.environ.get("PIPER_MODEL", "en_US-lessac-medium")
+PIPER_MODEL_PATH = os.environ.get(
+    "PIPER_MODEL_PATH",
+    str(_DEFAULT_PIPER_MODEL) if _DEFAULT_PIPER_MODEL.is_file() else "",
+)
+PIPER_TIMEOUT_S = int(os.environ.get("PIPER_TIMEOUT_S", "30"))
 CORS_ORIGINS = [
     o.strip()
     for o in os.environ.get(

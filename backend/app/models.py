@@ -56,6 +56,10 @@ class MoveReview(BaseModel):
     is_check: bool = False
     is_checkmate: bool = False
     is_stalemate: bool = False
+    comment: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+    comment_id: Optional[str] = None
+    audio_url: Optional[str] = None
 
 
 class PlayerStats(BaseModel):
