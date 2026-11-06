@@ -261,6 +261,17 @@ h2,
   margin-bottom: 0.45rem;
 }
 
+.player-rating {
+  margin-left: 0.45rem;
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--muted);
+}
+
+.accuracy-side.black .player-rating {
+  color: #c5d5cc;
+}
+
 .accuracy-score {
   font-family: Fraunces, Georgia, serif;
   font-size: 1.35rem;
