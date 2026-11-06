@@ -8,6 +8,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 import chess
 
 from app.chess.accuracy import split_by_side
+from app.chess.commentary import comment_for_move
 from app.chess.classifier import (
     Classification,
     MoveLabel,
@@ -21,6 +22,7 @@ from app.chess.pgn import ParsedGame, fen_cache_key, game_title, parse_pgn
 from app.chess.terminal import score_terminal_fen, terminal_cp_white
 from app.db.cache import Database
 from app.engine.stockfish import AnalysisSettings, EnginePool, EngineScore
+from app.voice.piper import schedule_review_audio
 
 logger = logging.getLogger(__name__)
 
@@ -202,6 +204,17 @@ async def analyze_game(
                 "is_checkmate": ply.is_checkmate,
                 "is_stalemate": ply.is_stalemate,
             }
+            spoken = comment_for_move(
+                ply.fen_before,
+                ply.uci,
+                classification.label.value,
+                best_uci,
+                job_id,
+                ply.ply,
+            )
+            move_data["comment"] = spoken["text"]
+            move_data["tags"] = spoken["tags"]
+            move_data["comment_id"] = spoken["comment_id"]
 
             review["moves"].append(move_data)
             labels.append(classification.label)
@@ -247,6 +260,7 @@ async def analyze_game(
             black_accuracy=stats["black"]["accuracy"],
         )
         await emit("done", {"review": review})
+        schedule_review_audio(review)
         return review
 
     except Exception as exc:

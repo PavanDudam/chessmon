@@ -1,6 +1,7 @@
 # Python
 backend/.venv/
 backend/bin/stockfish
+backend/bin/piper/
 backend/**/__pycache__/
 backend/**/*.py[cod]
 backend/.pytest_cache/

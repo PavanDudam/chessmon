@@ -1,14 +1,46 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getGame, subscribeGameEvents } from '../api/client'
 import { AccuracySummary } from '../components/AccuracySummary'
 import { Board } from '../components/Board'
+import { CoachBubble } from '../components/CoachBubble'
 import { EvalBar, formatEval } from '../components/EvalBar'
 import { EvalGraph } from '../components/EvalGraph'
 import { MoveList } from '../components/MoveList'
 import type { GameReview, MoveReview } from '../types'
 
 const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
+const COACH_KEY = 'chessmon.coach'
+const MUTE_KEY = 'chessmon.voice.mute'
+const VOLUME_KEY = 'chessmon.voice.volume'
+
+function readMuted() {
+  try {
+    return localStorage.getItem(MUTE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function readVolume() {
+  try {
+    const raw = localStorage.getItem(VOLUME_KEY)
+    if (raw === null) return 0.8
+    const value = Number(raw)
+    if (!Number.isFinite(value)) return 0.8
+    return Math.min(1, Math.max(0, value))
+  } catch {
+    return 0.8
+  }
+}
+
+function readCoachEnabled() {
+  try {
+    return localStorage.getItem(COACH_KEY) !== '0'
+  } catch {
+    return true
+  }
+}
 
 function playerRating(headers: Record<string, string>, side: 'White' | 'Black') {
   const raw = headers[`${side}Elo`] || headers[`${side}Rating`] || ''
@@ -22,6 +54,86 @@ export function Review() {
   const [currentPly, setCurrentPly] = useState(0)
   const [orientation, setOrientation] = useState<'white' | 'black'>('white')
   const [progress, setProgress] = useState({ current: 0, total: 0 })
+  const [coachOn, setCoachOn] = useState(readCoachEnabled)
+  const [voiceOn, setVoiceOn] = useState(false)
+  const [muted, setMuted] = useState(readMuted)
+  const [volume, setVolume] = useState(readVolume)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const playedPly = useRef<number | null>(null)
+
+  function speakAt(ply: number, enabled: boolean) {
+    const audio = audioRef.current
+    if (!audio) return
+    if (!enabled || !coachOn || muted) {
+      audio.pause()
+      return
+    }
+    const move = review?.moves.find((item) => item.ply === ply)
+    const url = move?.audio_url
+    if (!url) {
+      audio.pause()
+      return
+    }
+    audio.volume = volume
+    audio.src = url
+    playedPly.current = ply
+    // Must stay in the click or key handler. Firefox rejects a later play().
+    void audio.play().catch(() => undefined)
+  }
+
+  function goTo(ply: number) {
+    const max = review?.moves.length ?? 0
+    const next = Math.max(0, Math.min(max, ply))
+    setCurrentPly(next)
+    speakAt(next, voiceOn)
+  }
+
+  function toggleCoach() {
+    setCoachOn((on) => {
+      const next = !on
+      if (!next) audioRef.current?.pause()
+      try {
+        localStorage.setItem(COACH_KEY, next ? '1' : '0')
+      } catch {
+        /* private mode */
+      }
+      return next
+    })
+  }
+
+  function toggleVoice() {
+    const audio = audioRef.current
+    if (voiceOn && audio && !audio.paused) {
+      audio.pause()
+      setVoiceOn(false)
+      return
+    }
+    setVoiceOn(true)
+    speakAt(currentPly, true)
+  }
+
+  function toggleMute() {
+    setMuted((value) => {
+      const next = !value
+      if (next) audioRef.current?.pause()
+      try {
+        localStorage.setItem(MUTE_KEY, next ? '1' : '0')
+      } catch {
+        /* private mode */
+      }
+      return next
+    })
+  }
+
+  function changeVolume(value: number) {
+    setVolume(value)
+    if (audioRef.current) audioRef.current.volume = value
+    try {
+      localStorage.setItem(VOLUME_KEY, String(value))
+    } catch {
+      /* private mode */
+    }
+  }
 
   useEffect(() => {
     if (!id) return
@@ -100,26 +212,49 @@ export function Review() {
       const max = review.moves.length
       if (e.key === 'ArrowRight') {
         e.preventDefault()
-        setCurrentPly((p) => Math.min(max, p + 1))
+        goTo(Math.min(max, currentPly + 1))
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault()
-        setCurrentPly((p) => Math.max(0, p - 1))
+        goTo(Math.max(0, currentPly - 1))
       } else if (e.key === 'Home') {
         e.preventDefault()
-        setCurrentPly(0)
+        goTo(0)
       } else if (e.key === 'End') {
         e.preventDefault()
-        setCurrentPly(max)
+        goTo(max)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [review])
+  }, [review, currentPly, voiceOn, coachOn, muted, volume])
 
   const currentMove: MoveReview | null = useMemo(() => {
     if (!review || currentPly <= 0) return null
     return review.moves.find((m) => m.ply === currentPly) ?? null
   }, [review, currentPly])
+
+  const audioPending =
+    voiceOn &&
+    review?.status === 'completed' &&
+    review.moves.some((move) => Boolean(move.comment) && !move.audio_url)
+
+  useEffect(() => {
+    if (!id || !audioPending) return
+    let tries = 0
+    const timer = window.setInterval(() => {
+      tries += 1
+      if (tries > 30) {
+        window.clearInterval(timer)
+        return
+      }
+      getGame(id)
+        .then(setReview)
+        .catch(() => undefined)
+    }, 2000)
+    return () => window.clearInterval(timer)
+  }, [id, audioPending])
+
+  useEffect(() => () => audioRef.current?.pause(), [])
 
   const fen = currentMove?.fen_after ?? review?.starting_fen ?? START_FEN
   const mate = currentMove?.mate_after ?? null
@@ -175,8 +310,20 @@ export function Review() {
         black={review.black}
       />
 
+      <audio ref={audioRef} className="coach-audio" preload="none" />
       <div className="review-layout">
         <div className="board-column">
+          <CoachBubble
+            enabled={coachOn}
+            onToggle={toggleCoach}
+            move={currentMove}
+            voiceOn={voiceOn}
+            onVoice={toggleVoice}
+            muted={muted}
+            onMute={toggleMute}
+            volume={volume}
+            onVolume={changeVolume}
+          />
           <div className="board-with-eval">
             <EvalBar
               whiteWinPct={currentMove?.win_pct_after ?? 50}
@@ -187,28 +334,16 @@ export function Review() {
             <Board fen={fen} bestMoveUci={currentMove?.best_move_uci} orientation={orientation} />
           </div>
           <div className="nav-controls">
-            <button type="button" className="btn ghost" onClick={() => setCurrentPly(0)}>
+            <button type="button" className="btn ghost" onClick={() => goTo(0)}>
               ⏮
             </button>
-            <button
-              type="button"
-              className="btn ghost"
-              onClick={() => setCurrentPly((p) => Math.max(0, p - 1))}
-            >
+            <button type="button" className="btn ghost" onClick={() => goTo(currentPly - 1)}>
               ◀
             </button>
-            <button
-              type="button"
-              className="btn ghost"
-              onClick={() => setCurrentPly((p) => Math.min(review.moves.length, p + 1))}
-            >
+            <button type="button" className="btn ghost" onClick={() => goTo(currentPly + 1)}>
               ▶
             </button>
-            <button
-              type="button"
-              className="btn ghost"
-              onClick={() => setCurrentPly(review.moves.length)}
-            >
+            <button type="button" className="btn ghost" onClick={() => goTo(review.moves.length)}>
               ⏭
             </button>
             <button
@@ -248,8 +383,8 @@ export function Review() {
         </div>
 
         <aside className="side-column">
-          <EvalGraph moves={review.moves} currentPly={currentPly} onSelect={setCurrentPly} />
-          <MoveList moves={review.moves} currentPly={currentPly} onSelect={setCurrentPly} />
+          <EvalGraph moves={review.moves} currentPly={currentPly} onSelect={goTo} />
+          <MoveList moves={review.moves} currentPly={currentPly} onSelect={goTo} />
           <p className="hint muted">Arrow keys to navigate · click the graph to jump</p>
         </aside>
       </div>

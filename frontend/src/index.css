@@ -318,7 +318,74 @@ h2,
   gap: 0.75rem;
 }
 
+.coach {
+  order: 2;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 0.7rem 0.85rem;
+  box-shadow: var(--shadow);
+}
+
+.coach-mascot {
+  width: 72px;
+  height: 72px;
+  display: block;
+}
+
+.coach-body {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.coach-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.coach-toolbar .btn {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+.coach-line {
+  margin: 0;
+  padding: 0.55rem 0.7rem;
+  background: var(--bg-accent);
+  border-radius: 12px;
+  line-height: 1.35;
+}
+
+.coach-volume-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.coach-volume {
+  width: 4.5rem;
+  accent-color: var(--brand);
+}
+
+.coach-audio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .board-with-eval {
+  order: 1;
   display: grid;
   grid-template-columns: 36px 1fr;
   gap: 0.65rem;
@@ -371,11 +438,13 @@ h2,
 }
 
 .nav-controls {
+  order: 3;
   display: flex;
   gap: 0.4rem;
 }
 
 .move-detail {
+  order: 4;
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem 0.75rem;
@@ -507,6 +576,18 @@ h2,
 @media (max-width: 860px) {
   .review-layout {
     grid-template-columns: 1fr;
+  }
+
+  .coach {
+    order: 0;
+  }
+
+  .coach-line {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 
   .accuracy-summary {

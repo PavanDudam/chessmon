@@ -4,16 +4,18 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import AsyncIterator
+from typing import Any, AsyncIterator, Dict
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app import config
+from app.chess.commentary import ensure_comments
 from app.chess.pgn import parse_pgn
 from app.db.cache import db
 from app.engine.queue import job_queue
 from app.engine.stockfish import AnalysisSettings
+from app.voice.piper import schedule_review_audio
 from app.models import (
     CreateGameRequest,
     CreateGameResponse,
@@ -22,6 +24,28 @@ from app.models import (
 )
 
 router = APIRouter(prefix="/api/games", tags=["games"])
+
+
+def _persist_comments(game_id: str, review: Dict[str, Any]) -> Dict[str, Any]:
+    """Store template comments for reviews saved before commentary existed."""
+    if not ensure_comments(review, game_id):
+        return review
+    white = review.get("white") or {}
+    black = review.get("black") or {}
+    db.upsert_review(
+        review_id=review.get("id") or game_id,
+        title=review.get("title") or "Review",
+        pgn=review.get("pgn") or "",
+        headers=review.get("headers") or {},
+        starting_fen=review.get("starting_fen") or "",
+        status=review.get("status") or "completed",
+        settings=review.get("settings") or {},
+        review=review,
+        white_accuracy=white.get("accuracy") if isinstance(white, dict) else None,
+        black_accuracy=black.get("accuracy") if isinstance(black, dict) else None,
+        error=review.get("error"),
+    )
+    return review
 
 
 @router.post("", response_model=CreateGameResponse)
@@ -52,6 +76,8 @@ async def get_game(game_id: str) -> GameReview:
     review = db.get_review(game_id)
     if review is None:
         raise HTTPException(status_code=404, detail="Game not found")
+    review = _persist_comments(game_id, review)
+    schedule_review_audio(review)
     return GameReview(**review)
 
 
@@ -59,6 +85,9 @@ async def get_game(game_id: str) -> GameReview:
 async def game_events(game_id: str) -> StreamingResponse:
     # If already completed in DB, send a single done event
     existing = db.get_review(game_id)
+    if existing and existing.get("status") == "completed":
+        existing = _persist_comments(game_id, existing)
+        schedule_review_audio(existing)
     if existing and existing.get("status") in {"completed", "error"}:
         async def already_done() -> AsyncIterator[str]:
             if existing.get("status") == "error":

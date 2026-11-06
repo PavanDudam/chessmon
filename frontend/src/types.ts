@@ -21,6 +21,10 @@ export type MoveReview = {
   is_check: boolean
   is_checkmate: boolean
   is_stalemate: boolean
+  comment?: string | null
+  tags?: string[]
+  comment_id?: string | null
+  audio_url?: string | null
 }
 
 export type PlayerStats = {
