@@ -12,7 +12,6 @@ STOCKFISH_PATH = os.environ.get("STOCKFISH_PATH", str(DEFAULT_STOCKFISH))
 ENGINE_POOL_SIZE = int(os.environ.get("ENGINE_POOL_SIZE", "2"))
 ENGINE_HASH_MB = int(os.environ.get("ENGINE_HASH_MB", "128"))
 DEFAULT_MOVETIME_MS = int(os.environ.get("DEFAULT_MOVETIME_MS", "500"))
-BOOK_PLIES = int(os.environ.get("BOOK_PLIES", "10"))
 DATABASE_PATH = os.environ.get(
     "DATABASE_PATH", str(BASE_DIR / "data" / "chessmon.db")
 )

@@ -7,7 +7,6 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import chess
 
-from app import config
 from app.chess.accuracy import split_by_side
 from app.chess.classifier import (
     Classification,
@@ -17,6 +16,7 @@ from app.chess.classifier import (
     missed_forced_mate,
     score_to_cp_white,
 )
+from app.chess.openings import book_flags
 from app.chess.pgn import ParsedGame, fen_cache_key, game_title, parse_pgn
 from app.chess.terminal import score_terminal_fen, terminal_cp_white
 from app.db.cache import Database
@@ -130,9 +130,10 @@ async def analyze_game(
 
     # Eval of the starting position (before any moves)
     prev_score = await analyze_position(pool, database, parsed.starting_fen, settings)
+    theory = book_flags([ply.uci for ply in parsed.plies])
 
     try:
-        for ply in parsed.plies:
+        for index, ply in enumerate(parsed.plies):
             # Never ask Stockfish for terminal FENs (no legal moves → garbage / crashes).
             terminal_after = score_terminal_fen(ply.fen_after)
             if terminal_after is not None:
@@ -152,6 +153,8 @@ async def analyze_game(
                 prev_score.mate, score_after.mate, ply.moved_by_white
             )
 
+            # Best move is from the position BEFORE the played move.
+            best_uci = prev_score.best_move_uci
             if ply.is_checkmate:
                 # Delivering mate is always Best; store the synthetic terminal eval.
                 wp_after = cp_to_win_percent(cp_after)
@@ -164,32 +167,16 @@ async def analyze_game(
                     cp_after=cp_after,
                 )
             else:
-                tentative = classify_move(
+                classification = classify_move(
                     cp_before_white=cp_before,
                     cp_after_white=cp_after,
                     moved_by_white=ply.moved_by_white,
-                    is_book=False,
+                    is_book=theory[index],
                     missed_mate=missed,
-                )
-                is_book = (
-                    ply.ply <= config.BOOK_PLIES
-                    and tentative.win_pct_loss < 2.0
-                    and not missed
-                )
-                classification = (
-                    classify_move(
-                        cp_before_white=cp_before,
-                        cp_after_white=cp_after,
-                        moved_by_white=ply.moved_by_white,
-                        is_book=True,
-                        missed_mate=False,
-                    )
-                    if is_book
-                    else tentative
+                    is_engine_best=(ply.uci == best_uci) if best_uci else None,
                 )
 
-            # Best move / PV are from the position BEFORE the played move
-            best_uci = prev_score.best_move_uci
+            # PV is from the position BEFORE the played move
             pv_uci = prev_score.pv_uci or []
             move_data = {
                 "ply": ply.ply,

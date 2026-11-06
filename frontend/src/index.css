@@ -457,6 +457,7 @@ h2,
   color: #6a7370;
 }
 .label-best,
+.label-excellent,
 .label-good {
   color: #1f6b45;
 }
@@ -475,6 +476,7 @@ h2,
   color: #56605c;
 }
 .badge.label-best,
+.badge.label-excellent,
 .badge.label-good {
   background: #dff3e7;
   color: #1f6b45;

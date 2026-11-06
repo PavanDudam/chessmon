@@ -9,6 +9,7 @@ type Props = {
 const LABEL_CLASS: Record<string, string> = {
   Book: 'label-book',
   Best: 'label-best',
+  Excellent: 'label-excellent',
   Good: 'label-good',
   Inaccuracy: 'label-inaccuracy',
   Mistake: 'label-mistake',
@@ -18,6 +19,7 @@ const LABEL_CLASS: Record<string, string> = {
 const LABEL_SHORT: Record<string, string> = {
   Book: 'Book',
   Best: 'Best',
+  Excellent: 'Excel.',
   Good: 'Good',
   Inaccuracy: 'Inacc.',
   Mistake: 'Mist.',

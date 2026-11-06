@@ -37,6 +37,7 @@ def compute_player_stats(
         "counts": {
             "Book": counts.get(MoveLabel.BOOK.value, 0),
             "Best": counts.get(MoveLabel.BEST.value, 0),
+            "Excellent": counts.get(MoveLabel.EXCELLENT.value, 0),
             "Good": counts.get(MoveLabel.GOOD.value, 0),
             "Inaccuracy": counts.get(MoveLabel.INACCURACY.value, 0),
             "Mistake": counts.get(MoveLabel.MISTAKE.value, 0),
