@@ -10,6 +10,11 @@ import type { GameReview, MoveReview } from '../types'
 
 const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
 
+function playerRating(headers: Record<string, string>, side: 'White' | 'Black') {
+  const raw = headers[`${side}Elo`] || headers[`${side}Rating`] || ''
+  return /^\d+$/.test(raw) ? raw : null
+}
+
 export function Review() {
   const { id } = useParams<{ id: string }>()
   const [review, setReview] = useState<GameReview | null>(null)
@@ -138,6 +143,8 @@ export function Review() {
 
   const whiteName = review.headers.White || 'White'
   const blackName = review.headers.Black || 'Black'
+  const whiteRating = playerRating(review.headers, 'White')
+  const blackRating = playerRating(review.headers, 'Black')
 
   return (
     <div className="page review">
@@ -161,6 +168,8 @@ export function Review() {
       <AccuracySummary
         whiteName={whiteName}
         blackName={blackName}
+        whiteRating={whiteRating}
+        blackRating={blackRating}
         white={review.white}
         black={review.black}
       />
