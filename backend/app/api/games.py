@@ -94,7 +94,8 @@ async def game_events(game_id: str) -> StreamingResponse:
                 payload = {"type": "error", "message": existing.get("error") or "error"}
             else:
                 payload = {"type": "done", "review": existing}
-            yield f"data: {json.dumps(payload)}\n\n"
+            # Ask the browser to wait before reconnecting. A finished review has nothing further to send.
+            yield f"retry: 3600000\ndata: {json.dumps(payload)}\n\n"
 
         return StreamingResponse(already_done(), media_type="text/event-stream")
 
@@ -109,8 +110,10 @@ async def game_events(game_id: str) -> StreamingResponse:
                     yield ": keepalive\n\n"
                     continue
 
-                yield f"data: {json.dumps(event)}\n\n"
-                if event.get("type") in {"done", "error"}:
+                terminal = event.get("type") in {"done", "error"}
+                retry = "retry: 3600000\n" if terminal else ""
+                yield f"{retry}data: {json.dumps(event)}\n\n"
+                if terminal:
                     break
         finally:
             job_queue.unsubscribe(game_id, queue)

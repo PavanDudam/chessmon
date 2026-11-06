@@ -42,16 +42,28 @@ export function subscribeGameEvents(
   onError?: (err: Event) => void,
 ): () => void {
   const source = new EventSource(`/api/games/${id}/events`)
+  let stopped = false
+
+  const stop = () => {
+    if (stopped) return
+    stopped = true
+    source.close()
+  }
+
   source.onmessage = (msg) => {
+    if (stopped) return
     try {
       const data = JSON.parse(msg.data) as SseEvent
       onEvent(data)
+      // The server ends the response after these. Close so the browser does not reconnect.
+      if (data.type === 'done' || data.type === 'error') stop()
     } catch {
       // ignore malformed
     }
   }
   source.onerror = (err) => {
+    if (stopped) return
     onError?.(err)
   }
-  return () => source.close()
+  return stop
 }
