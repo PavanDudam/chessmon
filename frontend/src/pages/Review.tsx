@@ -20,6 +20,7 @@ export function Review() {
   const [review, setReview] = useState<GameReview | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [currentPly, setCurrentPly] = useState(0)
+  const [orientation, setOrientation] = useState<'white' | 'black'>('white')
   const [progress, setProgress] = useState({ current: 0, total: 0 })
 
   useEffect(() => {
@@ -181,8 +182,9 @@ export function Review() {
               whiteWinPct={currentMove?.win_pct_after ?? 50}
               cp={currentMove?.cp_after ?? 0}
               mate={mate}
+              flipped={orientation === 'black'}
             />
-            <Board fen={fen} bestMoveUci={currentMove?.best_move_uci} />
+            <Board fen={fen} bestMoveUci={currentMove?.best_move_uci} orientation={orientation} />
           </div>
           <div className="nav-controls">
             <button type="button" className="btn ghost" onClick={() => setCurrentPly(0)}>
@@ -208,6 +210,14 @@ export function Review() {
               onClick={() => setCurrentPly(review.moves.length)}
             >
               ⏭
+            </button>
+            <button
+              type="button"
+              className={`btn ghost ${orientation === 'black' ? 'active' : ''}`}
+              aria-pressed={orientation === 'black'}
+              onClick={() => setOrientation((side) => (side === 'white' ? 'black' : 'white'))}
+            >
+              {orientation === 'white' ? 'Black' : 'White'}
             </button>
           </div>
           {currentMove && (

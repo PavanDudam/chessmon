@@ -3,6 +3,8 @@ type Props = {
   whiteWinPct: number | null
   cp?: number | null
   mate?: number | null
+  /** Black at the bottom of the bar, matching a flipped board. The number stays White's view. */
+  flipped?: boolean
 }
 
 /** Format White-perspective CP / mate for display. */
@@ -13,7 +15,7 @@ export function formatEval(cp?: number | null, mate?: number | null): string {
   return `${pawns >= 0 ? '+' : ''}${pawns.toFixed(2)}`
 }
 
-export function EvalBar({ whiteWinPct, cp, mate }: Props) {
+export function EvalBar({ whiteWinPct, cp, mate, flipped = false }: Props) {
   const pct = whiteWinPct == null ? 50 : Math.max(2, Math.min(98, whiteWinPct))
   let text = '0.0'
   if (mate != null) {
@@ -23,7 +25,7 @@ export function EvalBar({ whiteWinPct, cp, mate }: Props) {
   }
 
   return (
-    <div className="eval-bar" aria-label={`Evaluation ${text}`}>
+    <div className={`eval-bar${flipped ? ' flipped' : ''}`} aria-label={`Evaluation ${text}`}>
       <div className="eval-bar-fill white" style={{ height: `${pct}%` }} />
       <div className="eval-bar-fill black" style={{ height: `${100 - pct}%` }} />
       <span className="eval-bar-label">{text}</span>
