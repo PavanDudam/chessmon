@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { motion, useReducedMotion } from 'motion/react'
+import { apiUrl } from '../api/base'
 import { getGame, subscribeGameEvents } from '../api/client'
 import { Board } from '../components/Board'
 import { Chapters } from '../components/Chapters'
@@ -152,7 +153,7 @@ export function Review() {
       return
     }
     audio.volume = volume
-    audio.src = url
+    audio.src = apiUrl(url)
     duckBoardSounds(true)
     void audio.play().catch(() => undefined)
     audio.onended = () => duckBoardSounds(false)

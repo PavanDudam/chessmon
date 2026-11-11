@@ -1,4 +1,5 @@
 import type { GameListItem, GameReview, SseEvent } from '../types'
+import { apiUrl } from './base'
 
 async function parseError(res: Response): Promise<string> {
   try {
@@ -14,7 +15,7 @@ export async function createGame(
   pgn: string,
   opts?: { movetime_ms?: number; depth?: number },
 ): Promise<string> {
-  const res = await fetch('/api/games', {
+  const res = await fetch(apiUrl('/api/games'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ pgn, ...opts }),
@@ -25,13 +26,13 @@ export async function createGame(
 }
 
 export async function getGame(id: string): Promise<GameReview> {
-  const res = await fetch(`/api/games/${id}`)
+  const res = await fetch(apiUrl(`/api/games/${id}`))
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
 }
 
 export async function listGames(): Promise<GameListItem[]> {
-  const res = await fetch('/api/games')
+  const res = await fetch(apiUrl('/api/games'))
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
 }
@@ -41,7 +42,7 @@ export function subscribeGameEvents(
   onEvent: (event: SseEvent) => void,
   onError?: (err: Event) => void,
 ): () => void {
-  const source = new EventSource(`/api/games/${id}/events`)
+  const source = new EventSource(apiUrl(`/api/games/${id}/events`))
   let stopped = false
 
   const stop = () => {

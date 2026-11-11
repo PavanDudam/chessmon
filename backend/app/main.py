@@ -44,9 +44,10 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="Chessmon", version="0.1.0", lifespan=lifespan)
 
+# Set CORS_ORIGINS to your Cloudflare Pages URL in production.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=config.CORS_ORIGINS + ["*"],
+    allow_origins=config.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

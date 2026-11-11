@@ -104,6 +104,31 @@ pytest -q
 
 Covers the classifier, openings, commentary, speakable text, Piper cache, terminal positions, and a Stockfish smoke test.
 
+
+## Deploy (Render + Cloudflare Pages)
+
+Previous games are **not** persisted across Render deploys (ephemeral disk). Analysis and coach voice still work.
+
+### Backend on Render
+
+1. Create a **Web Service** from this repo using Docker.
+2. Dockerfile path: `backend/Dockerfile`, context: `backend` (or use root [`render.yaml`](render.yaml)).
+3. Set env:
+   - `CORS_ORIGINS` = your Cloudflare Pages URL (e.g. `https://chessmon.pages.dev`)
+   - Optional: `ENGINE_POOL_SIZE=1`, `ENGINE_HASH_MB=64`
+4. Health check: `/api/health`
+5. The image downloads Stockfish + Piper at build time (binaries are not in git).
+
+### Frontend on Cloudflare Pages
+
+1. Root directory: `frontend`
+2. Build command: `npm ci && npm run build`
+3. Output directory: `dist`
+4. Environment variable: `VITE_API_URL` = your Render API origin (no trailing slash), e.g. `https://chessmon-api.onrender.com`
+5. SPA routing uses `public/_redirects` (`/* → /index.html`).
+
+Local `npm run dev` needs **no** `VITE_API_URL` (Vite proxies `/api` and `/audio`).
+
 ## Friend access (Tailscale)
 
 1. Install Tailscale on your PC and your friends' devices; sign into the same tailnet.
