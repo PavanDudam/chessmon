@@ -81,7 +81,7 @@ export function Review() {
   const [damageTick, setDamageTick] = useState(0)
   const [flashMode, setFlashMode] = useState<'blunder' | 'brilliant' | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
-  const [sheetTab, setSheetTab] = useState<'moves' | 'chapters' | 'coach'>('moves')
+  const [sheetTab, setSheetTab] = useState<'moves' | 'chapters'>('moves')
   const [isMobile, setIsMobile] = useState(false)
   const [theme, setTheme] = useState<ThemeMode>(() => readTheme())
 
@@ -506,6 +506,8 @@ export function Review() {
         damageTick={damageTick}
       />
 
+      {isMobile && <div className="mobile-coach">{coachNode}</div>}
+
       <audio ref={audioRef} className="coach-audio" preload="none" />
 
       <div className="review-main">
@@ -562,7 +564,11 @@ export function Review() {
               Flip
             </button>
             {isMobile && (
-              <button type="button" className="btn ghost" onClick={() => setSheetOpen(true)}>
+              <button
+                type="button"
+                className="btn ghost nav-panel-btn"
+                onClick={() => setSheetOpen(true)}
+              >
                 Panel
               </button>
             )}
@@ -611,7 +617,6 @@ export function Review() {
             onTab={setSheetTab}
             moves={movesNode}
             chapters={chaptersNode}
-            coach={coachNode}
           />
         </>
       )}
