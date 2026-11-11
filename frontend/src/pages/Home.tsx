@@ -30,14 +30,14 @@ export function Home() {
     <div className="page home">
       <header className="hero">
         <p className="brand">chessmon</p>
-        <h1>Review a game</h1>
+        <h1>Import a game</h1>
         <p className="lede">
-          Paste a PGN. Stockfish analyzes every move on your machine — labels, eval bar, and better
-          lines for you and your friends.
+          Paste a PGN. Stockfish analyzes every move on your machine — fighters, eval, and a
+          coach that speaks when the story turns.
         </p>
       </header>
 
-      <section className="panel">
+      <section className="panel import-hero">
         <PgnImport onSubmit={handleSubmit} busy={busy} />
       </section>
 
@@ -50,19 +50,26 @@ export function Home() {
         <ul className="game-list">
           {games.map((g) => (
             <li key={g.id}>
-              <Link to={`/review/${g.id}`}>
-                <span className="game-title">{g.title}</span>
-                <span className="game-meta">
-                  {g.status}
-                  {g.white_accuracy != null && g.black_accuracy != null
-                    ? ` · ${g.white_accuracy.toFixed(0)}% / ${g.black_accuracy.toFixed(0)}%`
-                    : ''}
-                </span>
+              <Link to={`/review/${g.id}`} className="game-card">
+                <div className="game-card-main">
+                  <span className="game-title">{g.title}</span>
+                  <span className="game-meta">{g.status}</span>
+                </div>
+                {g.white_accuracy != null && g.black_accuracy != null && (
+                  <div className="accuracy-rings" aria-label="Accuracy">
+                    <span className="ring good">{g.white_accuracy.toFixed(0)}</span>
+                    <span className="ring warn">{g.black_accuracy.toFixed(0)}</span>
+                  </div>
+                )}
               </Link>
             </li>
           ))}
         </ul>
       </section>
+
+      <p className="hint muted">
+        <Link to="/sandbox">Sandbox</Link> for ceremony timing.
+      </p>
     </div>
   )
 }
