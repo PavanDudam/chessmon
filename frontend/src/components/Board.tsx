@@ -57,8 +57,8 @@ export const Board = forwardRef<HTMLDivElement, Props>(function Board(
             width: '100%',
             borderRadius: '4px',
           },
-          lightSquareStyle: { backgroundColor: 'var(--ink-3)' },
-          darkSquareStyle: { backgroundColor: 'var(--ink-2)' },
+          lightSquareStyle: { backgroundColor: 'var(--sq-light)' },
+          darkSquareStyle: { backgroundColor: 'var(--sq-dark)' },
           animationDurationInMs: 280,
         }}
       />

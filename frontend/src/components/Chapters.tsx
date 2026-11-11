@@ -12,7 +12,6 @@ export function Chapters({ chapters, currentPly, onJump }: Props) {
 
   return (
     <div className="chapters" aria-label="Game chapters">
-      <p className="side-section-label">Moments</p>
       {chapters.map((c) => {
         const active = currentPly >= c.startPly && currentPly <= c.endPly
         return (

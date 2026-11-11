@@ -13,7 +13,7 @@ import { ReviewSheet } from '../components/ReviewSheet'
 import { EvalBar } from '../components/EvalBar'
 import { blunderHit, brilliantHit } from '../ceremonies/blunderHit'
 import { buildChapters } from '../lib/chapters'
-import { formatEval, gameWinner, lastToSquare, runningAccuracy } from '../lib/eval'
+import { gameWinner, lastToSquare, runningAccuracy } from '../lib/eval'
 import { duckBoardSounds, playSound, setBoardMuted } from '../lib/sounds'
 import { useReviewStore } from '../store/reviewStore'
 import type { GameReview, MoveReview } from '../types'
@@ -22,6 +22,9 @@ const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
 const COACH_KEY = 'chessmon.coach'
 const MUTE_KEY = 'chessmon.voice.mute'
 const VOLUME_KEY = 'chessmon.voice.volume'
+const THEME_KEY = 'chessmon.theme'
+
+type ThemeMode = 'night' | 'day'
 
 function readMuted() {
   try {
@@ -51,6 +54,18 @@ function readCoachEnabled() {
   }
 }
 
+function readTheme(): ThemeMode {
+  try {
+    return localStorage.getItem(THEME_KEY) === 'day' ? 'day' : 'night'
+  } catch {
+    return 'night'
+  }
+}
+
+function applyTheme(theme: ThemeMode) {
+  document.documentElement.setAttribute('data-theme', theme)
+}
+
 function playerRating(headers: Record<string, string>, side: 'White' | 'Black') {
   const raw = headers[`${side}Elo`] || headers[`${side}Rating`] || ''
   return /^\d+$/.test(raw) ? raw : null
@@ -68,6 +83,7 @@ export function Review() {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [sheetTab, setSheetTab] = useState<'moves' | 'chapters' | 'coach'>('moves')
   const [isMobile, setIsMobile] = useState(false)
+  const [theme, setTheme] = useState<ThemeMode>(() => readTheme())
 
   const currentPly = useReviewStore((s) => s.currentPly)
   const orientation = useReviewStore((s) => s.orientation)
@@ -101,7 +117,11 @@ export function Review() {
   }, [reducedMotionPref, setReducedMotion])
 
   useEffect(() => {
-    const mq = window.matchMedia('(max-width: 899px)')
+    applyTheme(theme)
+  }, [theme])
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1000px)')
     const apply = () => setIsMobile(mq.matches)
     apply()
     mq.addEventListener('change', apply)
@@ -222,6 +242,15 @@ export function Review() {
     if (audioRef.current) audioRef.current.volume = value
     try {
       localStorage.setItem(VOLUME_KEY, String(value))
+    } catch {
+      /* private mode */
+    }
+  }
+
+  function changeTheme(next: ThemeMode) {
+    setTheme(next)
+    try {
+      localStorage.setItem(THEME_KEY, next)
     } catch {
       /* private mode */
     }
@@ -444,6 +473,24 @@ export function Review() {
         {review.status === 'error' && (
           <p className="form-error">{review.error || error || 'Analysis failed'}</p>
         )}
+        <div className="theme-toggle" role="group" aria-label="Color theme">
+          <button
+            type="button"
+            className={theme === 'night' ? 'active' : ''}
+            aria-pressed={theme === 'night'}
+            onClick={() => changeTheme('night')}
+          >
+            Night
+          </button>
+          <button
+            type="button"
+            className={theme === 'day' ? 'active' : ''}
+            aria-pressed={theme === 'day'}
+            onClick={() => changeTheme('day')}
+          >
+            Day
+          </button>
+        </div>
       </header>
 
       <FighterCards
@@ -488,58 +535,36 @@ export function Review() {
             </div>
           </div>
 
-          <div className="board-footer">
-            <div className="nav-controls">
-              <button type="button" className="btn ghost" onClick={() => goTo(0)} aria-label="Start">
-                |&lt;
+          <div className="nav-controls">
+            <button type="button" className="btn ghost" onClick={() => goTo(0)} title="Starting position">
+              |&lt; Start
+            </button>
+            <button type="button" className="btn ghost" onClick={() => goTo(currentPly - 1)} title="Previous move">
+              &lt; Prev
+            </button>
+            <button type="button" className="btn ghost" onClick={() => goTo(currentPly + 1)} title="Next move">
+              Next &gt;
+            </button>
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={() => goTo(review.moves.length)}
+              title="Last move"
+            >
+              End &gt;|
+            </button>
+            <button
+              type="button"
+              className={`btn ghost ${orientation === 'black' ? 'active' : ''}`}
+              aria-pressed={orientation === 'black'}
+              onClick={() => setOrientation(orientation === 'white' ? 'black' : 'white')}
+            >
+              Flip
+            </button>
+            {isMobile && (
+              <button type="button" className="btn ghost" onClick={() => setSheetOpen(true)}>
+                Panel
               </button>
-              <button type="button" className="btn ghost" onClick={() => goTo(currentPly - 1)} aria-label="Previous">
-                &lt;
-              </button>
-              <button type="button" className="btn ghost" onClick={() => goTo(currentPly + 1)} aria-label="Next">
-                &gt;
-              </button>
-              <button
-                type="button"
-                className="btn ghost"
-                onClick={() => goTo(review.moves.length)}
-                aria-label="End"
-              >
-                &gt;|
-              </button>
-              <button
-                type="button"
-                className={`btn ghost ${orientation === 'black' ? 'active' : ''}`}
-                aria-pressed={orientation === 'black'}
-                onClick={() => setOrientation(orientation === 'white' ? 'black' : 'white')}
-              >
-                Flip
-              </button>
-              {isMobile && (
-                <button type="button" className="btn ghost" onClick={() => setSheetOpen(true)}>
-                  Panel
-                </button>
-              )}
-            </div>
-
-            {currentMove ? (
-              <div className="move-detail">
-                <span className={`badge label-${currentMove.label.toLowerCase()}`}>{currentMove.label}</span>
-                <span className="mono">
-                  {currentMove.move_number}
-                  {currentMove.moved_by_white ? '.' : '...'} {currentMove.san}
-                </span>
-                <span className="muted mono">
-                  {formatEval(currentMove.cp_after, currentMove.mate_after)}
-                  {currentMove.best_move_san && currentMove.best_move_san !== currentMove.san
-                    ? ` · better ${currentMove.best_move_san}`
-                    : ''}
-                </span>
-              </div>
-            ) : (
-              <div className="move-detail">
-                <span className="muted">Starting position · {formatEval(0, null)}</span>
-              </div>
             )}
           </div>
         </div>
@@ -547,34 +572,48 @@ export function Review() {
         {!isMobile && (
           <aside className="side-column">
             {coachNode}
-            <div className="side-scroll">
-              {chaptersNode}
-              {movesNode}
+            <div className="side-lists">
+              <section className="card side-card">
+                <h3 className="side-section-label">Moves</h3>
+                <div className="side-card-scroll">{movesNode}</div>
+              </section>
+              <section className="card side-card">
+                <h3 className="side-section-label">Moments</h3>
+                <div className="side-card-scroll">{chaptersNode}</div>
+              </section>
             </div>
-            <p className="hint muted">Arrows move · [ ] chapters · Home/End</p>
+            <section className="card graph-card">
+              <EvalTimeline
+                moves={review.moves}
+                currentPly={currentPly}
+                chapters={chapters}
+                onSelect={goTo}
+              />
+            </section>
           </aside>
         )}
       </div>
 
-      <div className="transport">
-        <EvalTimeline
-          moves={review.moves}
-          currentPly={currentPly}
-          chapters={chapters}
-          onSelect={goTo}
-        />
-      </div>
-
       {isMobile && (
-        <ReviewSheet
-          open={sheetOpen}
-          onOpenChange={setSheetOpen}
-          tab={sheetTab}
-          onTab={setSheetTab}
-          moves={movesNode}
-          chapters={chaptersNode}
-          coach={coachNode}
-        />
+        <>
+          <section className="card graph-card mobile-graph">
+            <EvalTimeline
+              moves={review.moves}
+              currentPly={currentPly}
+              chapters={chapters}
+              onSelect={goTo}
+            />
+          </section>
+          <ReviewSheet
+            open={sheetOpen}
+            onOpenChange={setSheetOpen}
+            tab={sheetTab}
+            onTab={setSheetTab}
+            moves={movesNode}
+            chapters={chaptersNode}
+            coach={coachNode}
+          />
+        </>
       )}
     </motion.div>
   )
