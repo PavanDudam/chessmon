@@ -1,5 +1,8 @@
-import { formatEval } from './EvalBar'
+import { useEffect, useState } from 'react'
+import { formatEval } from '../lib/eval'
+import type { CoachMood } from '../store/reviewStore'
 import type { MoveReview } from '../types'
+import coachPortrait from '../assets/coach-gnk.jpeg'
 
 type Props = {
   enabled: boolean
@@ -11,6 +14,8 @@ type Props = {
   onMute: () => void
   volume: number
   onVolume: (value: number) => void
+  mood?: CoachMood
+  forceText?: string | null
 }
 
 /** Called from Review.tsx beside the board. No other component draws the coach. */
@@ -24,14 +29,32 @@ export function CoachBubble({
   onMute,
   volume,
   onVolume,
+  mood = 'idle',
+  forceText = null,
 }: Props) {
-  const comment = move?.comment?.trim() ?? ''
-  const talking = enabled && comment.length > 0
+  const comment = forceText ?? (enabled ? (move?.comment?.trim() ?? '') : '')
+  const [typed, setTyped] = useState('')
+  const talking = Boolean(comment) && typed.length > 0 && typed.length < comment.length
+
+  useEffect(() => {
+    if (!comment) {
+      setTyped('')
+      return
+    }
+    let i = 0
+    setTyped('')
+    const interval = window.setInterval(() => {
+      i = Math.min(comment.length, i + 2)
+      setTyped(comment.slice(0, i))
+      if (i >= comment.length) window.clearInterval(interval)
+    }, 50)
+    return () => window.clearInterval(interval)
+  }, [comment])
 
   return (
     <section className="coach" aria-label="Coach">
-      <Mascot talking={talking} />
-      <div className="coach-body">
+      <div className="coach-header">
+        <CoachFace mood={mood} talking={talking || (Boolean(comment) && voiceOn && !muted)} />
         <div className="coach-toolbar">
           <button
             type="button"
@@ -41,12 +64,6 @@ export function CoachBubble({
           >
             Coach {enabled ? 'on' : 'off'}
           </button>
-          {enabled && move && (
-            <>
-              <span className={`badge label-${move.label.toLowerCase()}`}>{move.label}</span>
-              <span className="chip">{formatEval(move.cp_after, move.mate_after)}</span>
-            </>
-          )}
           {enabled && (
             <>
               <button
@@ -55,7 +72,7 @@ export function CoachBubble({
                 aria-pressed={voiceOn}
                 onClick={onVoice}
               >
-                Voice on
+                Voice
               </button>
               <button type="button" className="btn ghost" aria-pressed={muted} onClick={onMute}>
                 {muted ? 'Muted' : 'Mute'}
@@ -76,32 +93,53 @@ export function CoachBubble({
             </>
           )}
         </div>
-        {talking && (
+      </div>
+      <div className="coach-body">
+        {enabled && move && (
+          <div className="coach-chips">
+            <span className={`badge label-${move.label.toLowerCase()}`}>{move.label}</span>
+            <span className="chip mono">{formatEval(move.cp_after, move.mate_after)}</span>
+          </div>
+        )}
+        {comment ? (
           <p className="coach-line" aria-live="polite">
-            {comment}
+            {typed}
           </p>
+        ) : (
+          <p className="coach-line muted">Quiet on routine moves. Speak on swings.</p>
         )}
       </div>
     </section>
   )
 }
 
-function Mascot({ talking }: { talking: boolean }) {
+function CoachFace({ mood, talking }: { mood: CoachMood; talking: boolean }) {
   return (
-    <svg className="coach-mascot" viewBox="0 0 72 72" aria-hidden="true">
-      <rect x="22" y="8" width="8" height="10" rx="2" fill="#1f4d3a" />
-      <rect x="34" y="6" width="8" height="12" rx="2" fill="#1f4d3a" />
-      <rect x="46" y="8" width="8" height="10" rx="2" fill="#1f4d3a" />
-      <rect x="16" y="16" width="40" height="40" rx="16" fill="#2f6b4f" />
-      <circle cx="30" cy="32" r="3.2" fill="#f7faf7" />
-      <circle cx="46" cy="32" r="3.2" fill="#f7faf7" />
-      <circle cx="30" cy="33" r="1.4" fill="#1c2420" />
-      <circle cx="46" cy="33" r="1.4" fill="#1c2420" />
-      {talking ? (
-        <path d="M30 44c3 4 9 4 12 0" fill="none" stroke="#f7faf7" strokeWidth="2.4" strokeLinecap="round" />
-      ) : (
-        <path d="M30 45h12" fill="none" stroke="#f7faf7" strokeWidth="2.4" strokeLinecap="round" />
-      )}
-    </svg>
+    <div
+      className={`coach-face mood-${mood}${talking ? ' talking' : ''}`}
+      aria-hidden="true"
+    >
+      <img src={coachPortrait} alt="" className="coach-portrait" draggable={false} />
+
+      {/* Blink lids — timed via CSS animation on idle/think */}
+      <span className="coach-lid left" />
+      <span className="coach-lid right" />
+
+      {/* Mood / talk mouth drawn over the lower face */}
+      <svg className="coach-mouth" viewBox="0 0 40 20" aria-hidden="true">
+        {mood === 'cheer' ? (
+          <path d="M10 8c4 8 16 8 20 0" fill="none" stroke="#0e0f12" strokeWidth="2.4" strokeLinecap="round" />
+        ) : mood === 'wince' ? (
+          <path d="M12 14c3-5 13-5 16 0" fill="none" stroke="#0e0f12" strokeWidth="2.4" strokeLinecap="round" />
+        ) : talking ? (
+          <ellipse className="coach-mouth-open" cx="20" cy="11" rx="5" ry="4" fill="#0e0f12" />
+        ) : mood === 'think' ? (
+          <path d="M14 12h12" stroke="#0e0f12" strokeWidth="2" strokeLinecap="round" />
+        ) : null}
+      </svg>
+
+      {mood === 'think' && <span className="coach-think-dot" />}
+      {mood === 'wince' && <span className="coach-sweat" />}
+    </div>
   )
 }

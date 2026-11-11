@@ -1,12 +1,21 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { motion, useReducedMotion } from 'motion/react'
 import { getGame, subscribeGameEvents } from '../api/client'
-import { AccuracySummary } from '../components/AccuracySummary'
 import { Board } from '../components/Board'
+import { Chapters } from '../components/Chapters'
 import { CoachBubble } from '../components/CoachBubble'
-import { EvalBar, formatEval } from '../components/EvalBar'
-import { EvalGraph } from '../components/EvalGraph'
+import { EvalTimeline } from '../components/EvalTimeline'
+import { FighterCards } from '../components/FighterCards'
+import { LoadingCeremony } from '../components/LoadingCeremony'
 import { MoveList } from '../components/MoveList'
+import { ReviewSheet } from '../components/ReviewSheet'
+import { EvalBar } from '../components/EvalBar'
+import { blunderHit, brilliantHit } from '../ceremonies/blunderHit'
+import { buildChapters } from '../lib/chapters'
+import { formatEval, gameWinner, lastToSquare, runningAccuracy } from '../lib/eval'
+import { duckBoardSounds, playSound, setBoardMuted } from '../lib/sounds'
+import { useReviewStore } from '../store/reviewStore'
 import type { GameReview, MoveReview } from '../types'
 
 const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
@@ -49,62 +58,146 @@ function playerRating(headers: Record<string, string>, side: 'White' | 'Black') 
 
 export function Review() {
   const { id } = useParams<{ id: string }>()
+  const reducedMotionPref = useReducedMotion()
   const [review, setReview] = useState<GameReview | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [currentPly, setCurrentPly] = useState(0)
-  const [orientation, setOrientation] = useState<'white' | 'black'>('white')
   const [progress, setProgress] = useState({ current: 0, total: 0 })
-  const [coachOn, setCoachOn] = useState(readCoachEnabled)
-  const [voiceOn, setVoiceOn] = useState(false)
-  const [muted, setMuted] = useState(readMuted)
-  const [volume, setVolume] = useState(readVolume)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-  const playedPly = useRef<number | null>(null)
+  const [loaderDone, setLoaderDone] = useState(false)
+  const [damageTick, setDamageTick] = useState(0)
+  const [flashMode, setFlashMode] = useState<'blunder' | 'brilliant' | null>(null)
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const [sheetTab, setSheetTab] = useState<'moves' | 'chapters' | 'coach'>('moves')
+  const [isMobile, setIsMobile] = useState(false)
 
-  function speakAt(ply: number, enabled: boolean) {
+  const currentPly = useReviewStore((s) => s.currentPly)
+  const orientation = useReviewStore((s) => s.orientation)
+  const coachOn = useReviewStore((s) => s.coachOn)
+  const voiceOn = useReviewStore((s) => s.voiceOn)
+  const muted = useReviewStore((s) => s.muted)
+  const volume = useReviewStore((s) => s.volume)
+  const coachMood = useReviewStore((s) => s.coachMood)
+  const setPly = useReviewStore((s) => s.setPly)
+  const setOrientation = useReviewStore((s) => s.setOrientation)
+  const setCoachOn = useReviewStore((s) => s.setCoachOn)
+  const setVoiceOn = useReviewStore((s) => s.setVoiceOn)
+  const setMuted = useReviewStore((s) => s.setMuted)
+  const setVolume = useReviewStore((s) => s.setVolume)
+  const setCoachMood = useReviewStore((s) => s.setCoachMood)
+  const setReducedMotion = useReviewStore((s) => s.setReducedMotion)
+  const recordPlyChange = useReviewStore((s) => s.recordPlyChange)
+  const resetSession = useReviewStore((s) => s.resetSession)
+
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const boardRef = useRef<HTMLDivElement | null>(null)
+  const flashRef = useRef<HTMLDivElement | null>(null)
+  const labelRef = useRef<HTMLDivElement | null>(null)
+  const reviewRef = useRef(review)
+  useEffect(() => {
+    reviewRef.current = review
+  }, [review])
+
+  useEffect(() => {
+    setReducedMotion(Boolean(reducedMotionPref))
+  }, [reducedMotionPref, setReducedMotion])
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 899px)')
+    const apply = () => setIsMobile(mq.matches)
+    apply()
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
+  }, [])
+
+  useEffect(() => {
+    setCoachOn(readCoachEnabled())
+    setMuted(readMuted())
+    setVolume(readVolume())
+    setBoardMuted(readMuted())
+    resetSession()
+  }, [id, resetSession, setCoachOn, setMuted, setVolume])
+
+  function speakAt(ply: number, enabled: boolean, data: GameReview | null = reviewRef.current) {
     const audio = audioRef.current
     if (!audio) return
     if (!enabled || !coachOn || muted) {
       audio.pause()
+      duckBoardSounds(false)
       return
     }
-    const move = review?.moves.find((item) => item.ply === ply)
+    const move = data?.moves.find((item) => item.ply === ply)
     const url = move?.audio_url
     if (!url) {
       audio.pause()
+      duckBoardSounds(false)
       return
     }
     audio.volume = volume
     audio.src = url
-    playedPly.current = ply
-    // Must stay in the click or key handler. Firefox rejects a later play().
+    duckBoardSounds(true)
     void audio.play().catch(() => undefined)
+    audio.onended = () => duckBoardSounds(false)
   }
 
-  function goTo(ply: number) {
-    const max = review?.moves.length ?? 0
-    const next = Math.max(0, Math.min(max, ply))
-    setCurrentPly(next)
-    speakAt(next, voiceOn)
-  }
+  const goTo = useCallback(
+    (ply: number) => {
+      const data = reviewRef.current
+      const max = data?.moves.length ?? 0
+      const next = Math.max(0, Math.min(max, ply))
+      const scrubbingFast = recordPlyChange()
+      setPly(next)
+
+      const move = data?.moves.find((m) => m.ply === next) ?? null
+      if (move) {
+        if (move.san.includes('x')) playSound('capture')
+        else if (move.is_check) playSound('check')
+        else playSound('move')
+      }
+
+      speakAt(next, voiceOn, data)
+
+      if (!scrubbingFast && move) {
+        const reduced = Boolean(reducedMotionPref)
+        if (move.label === 'Blunder') {
+          setFlashMode('blunder')
+          setDamageTick((t) => t + 1)
+          void blunderHit(
+            { board: boardRef.current, square: flashRef.current, label: labelRef.current },
+            {
+              reducedMotion: reduced,
+              setMood: setCoachMood,
+              onDamage: () => setDamageTick((t) => t + 1),
+            },
+          ).finally(() => setFlashMode(null))
+        } else if (move.label === 'Brilliant' || (move.label === 'Best' && (move.win_pct_loss ?? 0) < 0.5 && move.comment)) {
+          // Cheer only for brilliant / critical-feeling best with commentary
+          if (move.label === 'Brilliant') {
+            setFlashMode('brilliant')
+            void brilliantHit(
+              { square: flashRef.current },
+              { reducedMotion: reduced, setMood: setCoachMood },
+            ).finally(() => setFlashMode(null))
+          }
+        }
+      }
+    },
+    [recordPlyChange, reducedMotionPref, setCoachMood, setPly, voiceOn, coachOn, muted, volume],
+  )
 
   function toggleCoach() {
-    setCoachOn((on) => {
-      const next = !on
-      if (!next) audioRef.current?.pause()
-      try {
-        localStorage.setItem(COACH_KEY, next ? '1' : '0')
-      } catch {
-        /* private mode */
-      }
-      return next
-    })
+    setCoachOn(!coachOn)
+    if (coachOn) audioRef.current?.pause()
+    try {
+      localStorage.setItem(COACH_KEY, !coachOn ? '1' : '0')
+    } catch {
+      /* private mode */
+    }
   }
 
   function toggleVoice() {
     const audio = audioRef.current
     if (voiceOn && audio && !audio.paused) {
       audio.pause()
+      duckBoardSounds(false)
       setVoiceOn(false)
       return
     }
@@ -113,16 +206,15 @@ export function Review() {
   }
 
   function toggleMute() {
-    setMuted((value) => {
-      const next = !value
-      if (next) audioRef.current?.pause()
-      try {
-        localStorage.setItem(MUTE_KEY, next ? '1' : '0')
-      } catch {
-        /* private mode */
-      }
-      return next
-    })
+    const next = !muted
+    setMuted(next)
+    setBoardMuted(next)
+    if (next) audioRef.current?.pause()
+    try {
+      localStorage.setItem(MUTE_KEY, next ? '1' : '0')
+    } catch {
+      /* private mode */
+    }
   }
 
   function changeVolume(value: number) {
@@ -138,6 +230,7 @@ export function Review() {
   useEffect(() => {
     if (!id) return
     let cancelled = false
+    setLoaderDone(false)
 
     getGame(id)
       .then((data) => {
@@ -148,7 +241,8 @@ export function Review() {
           total: data.progress?.total ?? data.moves.length,
         })
         if (data.status === 'completed') {
-          setCurrentPly(0)
+          setPly(0)
+          setLoaderDone(true)
         }
       })
       .catch((err) => {
@@ -190,8 +284,6 @@ export function Review() {
         }
       },
       () => {
-        // A drop before the terminal event. If the review is already finished, close
-        // so the browser does not reconnect for the rest of the visit.
         if (!id) return
         getGame(id)
           .then((data) => {
@@ -208,12 +300,18 @@ export function Review() {
       cancelled = true
       unsub()
     }
-  }, [id])
+  }, [id, setPly])
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (!review) return
+      const analyzingNow = review.status === 'analyzing' || review.status === 'pending'
+      if (analyzingNow && !loaderDone) return
       const max = review.moves.length
+      const chapters = buildChapters(review.moves, {
+        whiteName: review.headers.White || 'White',
+        blackName: review.headers.Black || 'Black',
+      })
       if (e.key === 'ArrowRight') {
         e.preventDefault()
         goTo(Math.min(max, currentPly + 1))
@@ -226,16 +324,32 @@ export function Review() {
       } else if (e.key === 'End') {
         e.preventDefault()
         goTo(max)
+      } else if (e.key === '[') {
+        e.preventDefault()
+        const prev = [...chapters].reverse().find((c) => c.endPly < currentPly)
+        if (prev) goTo(prev.endPly)
+      } else if (e.key === ']') {
+        e.preventDefault()
+        const next = chapters.find((c) => c.endPly > currentPly)
+        if (next) goTo(next.endPly)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [review, currentPly, voiceOn, coachOn, muted, volume])
+  }, [review, currentPly, goTo, loaderDone])
 
   const currentMove: MoveReview | null = useMemo(() => {
     if (!review || currentPly <= 0) return null
     return review.moves.find((m) => m.ply === currentPly) ?? null
   }, [review, currentPly])
+
+  const chapters = useMemo(() => {
+    if (!review) return []
+    return buildChapters(review.moves, {
+      whiteName: review.headers.White || 'White',
+      blackName: review.headers.Black || 'Black',
+    })
+  }, [review])
 
   const audioPending =
     voiceOn &&
@@ -263,6 +377,7 @@ export function Review() {
   const fen = currentMove?.fen_after ?? review?.starting_fen ?? START_FEN
   const mate = currentMove?.mate_after ?? null
   const analyzing = review?.status === 'analyzing' || review?.status === 'pending'
+  const showLoader = Boolean(review && analyzing && !loaderDone)
 
   if (error && !review) {
     return (
@@ -281,117 +396,186 @@ export function Review() {
     )
   }
 
+  if (showLoader) {
+    return (
+      <LoadingCeremony
+        current={progress.current}
+        total={progress.total || review.moves.length}
+        moves={review.moves}
+        onReady={() => setLoaderDone(true)}
+      />
+    )
+  }
+
   const whiteName = review.headers.White || 'White'
   const blackName = review.headers.Black || 'Black'
   const whiteRating = playerRating(review.headers, 'White')
   const blackRating = playerRating(review.headers, 'Black')
+  const whiteRunning = runningAccuracy(review.moves, currentPly, true)
+  const blackRunning = runningAccuracy(review.moves, currentPly, false)
+  const winPct = currentMove?.win_pct_after ?? 50
+  const toSquare = lastToSquare(currentMove?.uci)
+
+  const coachNode = (
+    <CoachBubble
+      enabled={coachOn}
+      onToggle={toggleCoach}
+      move={currentMove}
+      voiceOn={voiceOn}
+      onVoice={toggleVoice}
+      muted={muted}
+      onMute={toggleMute}
+      volume={volume}
+      onVolume={changeVolume}
+      mood={coachMood}
+    />
+  )
+
+  const movesNode = <MoveList moves={review.moves} currentPly={currentPly} onSelect={goTo} />
+  const chaptersNode = <Chapters chapters={chapters} currentPly={currentPly} onJump={goTo} />
 
   return (
-    <div className="page review">
-      <header className="review-header">
+    <motion.div className="review-hud" layoutId="review-shell">
+      <header className="review-topbar">
         <Link to="/" className="back">
-          ← chessmon
+          chessmon
         </Link>
-        <div>
-          <h1>{review.title}</h1>
-          {analyzing && (
-            <p className="progress">
-              Analyzing move {progress.current} of {progress.total || '…'}
-            </p>
-          )}
-          {review.status === 'error' && (
-            <p className="form-error">{review.error || error || 'Analysis failed'}</p>
-          )}
-        </div>
+        <h1 className="review-title">{review.title}</h1>
+        {review.status === 'error' && (
+          <p className="form-error">{review.error || error || 'Analysis failed'}</p>
+        )}
       </header>
 
-      <AccuracySummary
+      <FighterCards
         whiteName={whiteName}
         blackName={blackName}
         whiteRating={whiteRating}
         blackRating={blackRating}
         white={review.white}
         black={review.black}
+        whiteRunning={whiteRunning}
+        blackRunning={blackRunning}
+        winner={gameWinner(review.headers)}
+        damageTick={damageTick}
       />
 
       <audio ref={audioRef} className="coach-audio" preload="none" />
-      <div className="review-layout">
+
+      <div className="review-main">
         <div className="board-column">
-          <CoachBubble
-            enabled={coachOn}
-            onToggle={toggleCoach}
-            move={currentMove}
-            voiceOn={voiceOn}
-            onVoice={toggleVoice}
-            muted={muted}
-            onMute={toggleMute}
-            volume={volume}
-            onVolume={changeVolume}
-          />
           <div className="board-with-eval">
             <EvalBar
-              whiteWinPct={currentMove?.win_pct_after ?? 50}
+              whiteWinPct={winPct}
               cp={currentMove?.cp_after ?? 0}
               mate={mate}
               flipped={orientation === 'black'}
+              classification={currentMove?.label ?? null}
             />
-            <Board fen={fen} bestMoveUci={currentMove?.best_move_uci} orientation={orientation} />
+            <div className="board-stage">
+              <Board
+                ref={boardRef}
+                fen={fen}
+                bestMoveUci={currentMove?.best_move_uci}
+                orientation={orientation}
+                lastToSquare={toSquare}
+                classification={currentMove?.label ?? null}
+                flashMode={flashMode}
+              />
+              <div className="blunder-float" ref={labelRef} aria-hidden="true">
+                Blunder
+              </div>
+              <div className="flash-hit-target" ref={flashRef} aria-hidden="true" />
+            </div>
           </div>
-          <div className="nav-controls">
-            <button type="button" className="btn ghost" onClick={() => goTo(0)}>
-              ⏮
-            </button>
-            <button type="button" className="btn ghost" onClick={() => goTo(currentPly - 1)}>
-              ◀
-            </button>
-            <button type="button" className="btn ghost" onClick={() => goTo(currentPly + 1)}>
-              ▶
-            </button>
-            <button type="button" className="btn ghost" onClick={() => goTo(review.moves.length)}>
-              ⏭
-            </button>
-            <button
-              type="button"
-              className={`btn ghost ${orientation === 'black' ? 'active' : ''}`}
-              aria-pressed={orientation === 'black'}
-              onClick={() => setOrientation((side) => (side === 'white' ? 'black' : 'white'))}
-            >
-              {orientation === 'white' ? 'Black' : 'White'}
-            </button>
-          </div>
-          {currentMove && (
-            <div className="move-detail">
-              <span className={`badge label-${currentMove.label.toLowerCase()}`}>
-                {currentMove.label}
-              </span>
-              <span>
-                {currentMove.move_number}
-                {currentMove.moved_by_white ? '.' : '...'} {currentMove.san}
-              </span>
-              <span className="muted">
-                Eval {formatEval(currentMove.cp_after, currentMove.mate_after)}
-                {currentMove.best_move_san && currentMove.best_move_san !== currentMove.san
-                  ? ` · better ${currentMove.best_move_san}`
-                  : ''}
-              </span>
-              {currentMove.pv_san.length > 0 && (
-                <p className="pv">Line: {currentMove.pv_san.slice(0, 8).join(' ')}</p>
+
+          <div className="board-footer">
+            <div className="nav-controls">
+              <button type="button" className="btn ghost" onClick={() => goTo(0)} aria-label="Start">
+                |&lt;
+              </button>
+              <button type="button" className="btn ghost" onClick={() => goTo(currentPly - 1)} aria-label="Previous">
+                &lt;
+              </button>
+              <button type="button" className="btn ghost" onClick={() => goTo(currentPly + 1)} aria-label="Next">
+                &gt;
+              </button>
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() => goTo(review.moves.length)}
+                aria-label="End"
+              >
+                &gt;|
+              </button>
+              <button
+                type="button"
+                className={`btn ghost ${orientation === 'black' ? 'active' : ''}`}
+                aria-pressed={orientation === 'black'}
+                onClick={() => setOrientation(orientation === 'white' ? 'black' : 'white')}
+              >
+                Flip
+              </button>
+              {isMobile && (
+                <button type="button" className="btn ghost" onClick={() => setSheetOpen(true)}>
+                  Panel
+                </button>
               )}
             </div>
-          )}
-          {!currentMove && (
-            <div className="move-detail">
-              <span className="muted">Starting position · eval {formatEval(0, null)}</span>
-            </div>
-          )}
+
+            {currentMove ? (
+              <div className="move-detail">
+                <span className={`badge label-${currentMove.label.toLowerCase()}`}>{currentMove.label}</span>
+                <span className="mono">
+                  {currentMove.move_number}
+                  {currentMove.moved_by_white ? '.' : '...'} {currentMove.san}
+                </span>
+                <span className="muted mono">
+                  {formatEval(currentMove.cp_after, currentMove.mate_after)}
+                  {currentMove.best_move_san && currentMove.best_move_san !== currentMove.san
+                    ? ` · better ${currentMove.best_move_san}`
+                    : ''}
+                </span>
+              </div>
+            ) : (
+              <div className="move-detail">
+                <span className="muted">Starting position · {formatEval(0, null)}</span>
+              </div>
+            )}
+          </div>
         </div>
 
-        <aside className="side-column">
-          <EvalGraph moves={review.moves} currentPly={currentPly} onSelect={goTo} />
-          <MoveList moves={review.moves} currentPly={currentPly} onSelect={goTo} />
-          <p className="hint muted">Arrow keys to navigate · click the graph to jump</p>
-        </aside>
+        {!isMobile && (
+          <aside className="side-column">
+            {coachNode}
+            <div className="side-scroll">
+              {chaptersNode}
+              {movesNode}
+            </div>
+            <p className="hint muted">Arrows move · [ ] chapters · Home/End</p>
+          </aside>
+        )}
       </div>
-    </div>
+
+      <div className="transport">
+        <EvalTimeline
+          moves={review.moves}
+          currentPly={currentPly}
+          chapters={chapters}
+          onSelect={goTo}
+        />
+      </div>
+
+      {isMobile && (
+        <ReviewSheet
+          open={sheetOpen}
+          onOpenChange={setSheetOpen}
+          tab={sheetTab}
+          onTab={setSheetTab}
+          moves={movesNode}
+          chapters={chaptersNode}
+          coach={coachNode}
+        />
+      )}
+    </motion.div>
   )
 }
