@@ -52,6 +52,10 @@
   --spring-ui: 180ms;
   --spring-piece: 320ms;
   --freeze: 90ms;
+  /* Default open scale 120%. Layout uses compensated vh so nothing clips. */
+  --ui-scale: 1.2;
+  --vh: calc(100dvh / var(--ui-scale));
+  --vw: calc(100vw / var(--ui-scale));
 
   font-family: var(--font-display);
   color: var(--text);
@@ -100,6 +104,10 @@
 
 * { box-sizing: border-box; }
 
+html {
+  zoom: var(--ui-scale);
+}
+
 html, body, #root {
   margin: 0;
   min-height: 100%;
@@ -108,7 +116,7 @@ html, body, #root {
   color: var(--text);
 }
 
-body { min-height: 100dvh; overflow: hidden; }
+body { min-height: var(--vh); overflow: hidden; }
 body:has(.page.home), body:has(.page.sandbox) { overflow: auto; }
 
 a { color: var(--good); text-decoration: none; }
@@ -126,7 +134,7 @@ h1, h2, .brand {
 }
 
 .app-shell {
-  min-height: 100dvh;
+  min-height: var(--vh);
   max-width: none;
   margin: 0;
   padding: 0;
@@ -258,7 +266,7 @@ h1, h2, .brand {
 
 /* Review HUD */
 .review-hud {
-  height: 100dvh;
+  height: var(--vh);
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -391,7 +399,7 @@ h1, h2, .brand {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  --b: min(620px, calc(100vh - 290px));
+  --b: min(620px, calc(var(--vh) - 290px));
   min-height: 0;
 }
 .board-with-eval {
@@ -848,7 +856,7 @@ h1, h2, .brand {
 
 /* Loading */
 .loading-ceremony {
-  min-height: 100dvh;
+  min-height: var(--vh);
   display: grid;
   place-items: center;
   padding: 2rem;
@@ -958,12 +966,12 @@ h1, h2, .brand {
   body { overflow: auto; }
   .review-hud {
     height: auto;
-    min-height: 100dvh;
+    min-height: var(--vh);
     padding: 12px;
     overflow: visible;
   }
   .review-main { grid-template-columns: 1fr; }
-  .board-column { --b: min(92vw, 560px); }
+  .board-column { --b: min(calc(var(--vw) * 0.92), 560px); }
   .board-with-eval { width: calc(var(--b) + 22px); max-width: 100%; }
   .nav-controls {
     margin-left: 22px;
